@@ -5,7 +5,11 @@ endpoints from ``{issuer}/.well-known/openid-configuration``, builds the PKCE (S
 URL, exchanges the code, and verifies the **ID token** (the access token is opaque per spec)
 against the discovered ``jwks_uri`` with ``iss``/``aud`` pinned. Public and confidential
 (``client_secret`` layered on top of PKCE, never replacing it) clients both work. Config:
-``dashboard.oauth.self_hosted.{issuer,client_id,scopes,client_secret}`` or ``HERMES_DASHBOARD_OIDC_*``.
+``dashboard.oauth.self_hosted.{issuer,client_id,scopes,client_secret,providername}`` or ``HERMES_DASHBOARD_OIDC_*``.
+
+providername / provider_name (optional)
+    Custom label shown on the login button (e.g. "My Company SSO").
+    Env: HERMES_DASHBOARD_OIDC_PROVIDERNAME
 """
 
 from __future__ import annotations
@@ -68,13 +72,22 @@ class SelfHostedOIDCProvider(JwtOAuthProvider):
     """Generic self-hosted OpenID Connect provider (authorization-code + PKCE)."""
 
     name = "self-hosted"
-    display_name = "Self-Hosted OIDC"
+    display_name = "Self-hosted OIDC"
 
-    def __init__(self, *, issuer: str, client_id: str, scopes: str = _DEFAULT_SCOPES, client_secret: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        issuer: str,
+        client_id: str,
+        scopes: str = _DEFAULT_SCOPES,
+        client_secret: str = "",
+        display_name: str = "Self-hosted OIDC",
+    ) -> None:
         if not issuer:
             raise ValueError("issuer is required")
         if not client_id:
             raise ValueError("client_id is required")
+        self.display_name = display_name or "Self-hosted OIDC"
         # Trailing slash normalised for stable compares; ``iss`` is pinned against the
         # *discovered* issuer so a config/IDP slash mismatch is tolerated.
         self._issuer = issuer.rstrip("/")
@@ -277,11 +290,14 @@ def _settings() -> dict:
             "dashboard.oauth.self_hosted.{issuer,client_id} in config.yaml — or pass "
             "--insecure to skip the OAuth gate entirely. (issuer set: %s; client_id set: %s)"
             % (bool(issuer), bool(client_id)))
+    display_name = setting("HERMES_DASHBOARD_OIDC_PROVIDERNAME", "providername") or setting("HERMES_DASHBOARD_OIDC_PROVIDERNAME", "provider_name") or "Self-hosted OIDC"
+
     return {
         "issuer": issuer, "client_id": client_id,
         "scopes": setting("HERMES_DASHBOARD_OIDC_SCOPES", "scopes") or _DEFAULT_SCOPES,
         # Credential: canonical home is the env var / ~/.hermes/.env. Empty ⇒ public client.
-        "client_secret": setting("HERMES_DASHBOARD_OIDC_CLIENT_SECRET", "client_secret")}
+        "client_secret": setting("HERMES_DASHBOARD_OIDC_CLIENT_SECRET", "client_secret"),
+        "display_name": display_name}
 
 
 def register(ctx) -> None:
