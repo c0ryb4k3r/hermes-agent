@@ -454,9 +454,24 @@ def _require_session(request: Request):
 async def api_auth_me(request: Request):
     """Return the verified session as JSON. Auth-required (gate enforces)."""
     sess = _require_session(request)
+
+    # Resolve a provider name when available
+    provider_label = sess.provider
+    try:
+        p = get_provider(sess.provider)
+        if p and getattr(p, "display_name", None):
+            provider_label = p.display_name
+    except Exception:
+        pass
+
     return {
-        "user_id": sess.user_id, "email": sess.email, "display_name": sess.display_name,
-        "org_id": sess.org_id, "provider": sess.provider, "expires_at": sess.expires_at}
+        "user_id": sess.user_id,
+        "email": sess.email,
+        "display_name": sess.display_name,
+        "org_id": sess.org_id,
+        "provider": provider_label,
+        "expires_at": sess.expires_at,
+    }
 
 
 @router.post("/api/auth/ws-ticket", name="auth_ws_ticket")
