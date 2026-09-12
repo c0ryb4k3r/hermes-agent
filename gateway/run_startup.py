@@ -1442,6 +1442,13 @@ class GatewayStartupMixin:
         platform_name = (row.get("handoff_platform") or "").strip().lower()
         if not platform_name:
             raise RuntimeError("handoff_platform is empty")
+
+        # Support teams:<channel_id>
+        target_channel = None
+        if ":" in platform_name:
+            platform_name, target_channel = platform_name.split(":", 1)
+            target_channel = target_channel.strip() or None
+
         try:
             platform = Platform(platform_name)
         except (ValueError, KeyError):
@@ -1452,12 +1459,16 @@ class GatewayStartupMixin:
         transport = resolve_delivery_transport(platform, handoff_config, handoff_adapters)
         if not transport:
             raise RuntimeError(f"platform '{platform_name}' is not active in this gateway")
-        home = handoff_config.get_home_channel(platform)
-        if not home or not home.chat_id:
-            raise RuntimeError(
-                f"no home channel configured for {platform_name}; run /sethome on the desired chat first"
-            )
-        home_chat_id = str(home.chat_id)
+
+        if target_channel:
+            home_chat_id = target_channel
+        else:
+            home = handoff_config.get_home_channel(platform)
+            if not home or not home.chat_id:
+                raise RuntimeError(
+                    f"no home channel configured for {platform_name}; run /sethome on the desired chat first"
+                )
+            home_chat_id = str(home.chat_id)
         # Fresh thread for the handoff's own scrollback; None when unsupported or creation failed.
         cli_title = row.get("title") or cli_session_id[:8]
         try:
