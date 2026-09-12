@@ -1115,12 +1115,19 @@ class CLICommandsMixin:
 
         Validate target → prepare session row → mark pending → block-poll (see ``_handoff_wait``).
         Returns False only on ``completed`` (caller exits like /quit); True keeps the session."""
-        platform_name = _command_arg(cmd_original).lower()
-        if not platform_name:
+        raw_target = _command_arg(cmd_original).strip()
+        if not raw_target:
             return self._handoff_keep(
-                "  Usage: /handoff <platform>",
-                "  Hands the current session off to that platform's home channel.",
+                "  Usage: /handoff <platform>   or   /handoff teams:<channel_id>",
+                "  Hands off to the platform's home channel, or to a specific Teams channel ID.",
+                "  Example: /handoff teams:19:82dac...@thread.tacv2",
                 "  The CLI session ends here; resume it later with /resume.")
+
+        # Support teams:<channel_id> syntax for multi-channel Teams
+        if ":" in raw_target:
+            base_platform = raw_target.split(":", 1)[0].lower()
+        else:
+            base_platform = raw_target.lower()
         home = self._handoff_validate_target(platform_name)
         if home is None:
             return True
