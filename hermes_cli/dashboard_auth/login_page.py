@@ -439,12 +439,15 @@ _PASSWORD_FORM_SCRIPT = """\
 """
 
 
-def render_login_html(*, next_path: str = "") -> str:
+def render_login_html(*, next_path: str = "", prefix: str = "") -> str:
     """Return the full HTML for ``GET /login``.
 
     ``next_path`` is threaded into each provider button/form so the OAuth round
     trip carries it end-to-end. The caller validates it same-origin; it is
     HTML-escaped here as defence in depth.
+
+    ``prefix`` (e.g. "/hermes") is prepended to generated links so the login
+    page works correctly when the dashboard is mounted under a subpath.
     """
     providers = list_session_providers()
     if not providers:
@@ -452,10 +455,11 @@ def render_login_html(*, next_path: str = "") -> str:
     # URL-encode then HTML-escape, matching the gate's ``_safe_next_target``
     # shape so a round-tripped value is byte-identical.
     next_qs = f"&next={html.escape(quote(next_path, safe=''), quote=True)}" if next_path else ""
+    auth_login_path = f"{prefix}/auth/login" if prefix else "/auth/login"
     buttons = [
-        _render_password_form(p, next_path) if getattr(p, "supports_password", False) else
+        _render_password_form(p, next_path, prefix=prefix) if getattr(p, "supports_password", False) else
         f'      <a class="provider-btn" '
-        f'href="/auth/login?provider={html.escape(p.name, quote=True)}{next_qs}">'
+        f'href="{auth_login_path}?provider={html.escape(p.name, quote=True)}{next_qs}">'
         f'Sign in with {html.escape(p.display_name)}</a>'
         for p in providers
     ]
@@ -487,7 +491,7 @@ def render_native_provider_choice_html(
     return _LOGIN_HTML_TEMPLATE.format(provider_buttons="\n".join(buttons), password_script="")
 
 
-def _render_password_form(provider, next_path: str) -> str:
+def _render_password_form(provider, next_path: str, *, prefix: str = "") -> str:
     """Username/password form for a ``supports_password`` provider.
 
     ``next_path`` rides in a hidden field (already validated by the caller,

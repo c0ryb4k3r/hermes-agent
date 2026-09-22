@@ -58,8 +58,26 @@ def _safe_next_target(request: Request) -> str:
     path = request.url.path
     if not path or not is_safe_next_path(path):
         return ""
+
+    # Don't carry the mounted root itself as a next target
+    # (e.g. hitting /hermes/ should not produce next=%2F)
+    prefix = prefix_from_request(request)
+    if prefix:
+        if path.rstrip("/") == prefix:
+            return ""
+    elif path.rstrip("/") in ("", "/"):
+        return ""
+
     query = request.url.query
-    return quote(f"{path}?{query}" if query else path, safe="")
+    target = f"{path}?{query}" if query else path
+
+    # Reconstruct the full client-visible path using the detected prefix
+    # so deep links under a subpath (e.g. /hermes/sessions) work correctly.
+    prefix = prefix_from_request(request)
+    if prefix and not target.startswith(prefix):
+        target = prefix + target if target.startswith("/") else prefix + "/" + target
+
+    return quote(target, safe="")
 
 
 def _unauth_response(request: Request, *, reason: str) -> Response:
@@ -156,6 +174,12 @@ async def gated_auth_middleware(
     # route): not a cookie session, must not bounce to /login.
     if getattr(request.state, "token_authenticated", False) or _path_is_public(request.url.path):
         return await call_next(request)
+
+    # Defensive: if the request is exactly to the mounted root (e.g. /hermes/),
+    # treat it as a protected page and redirect to the prefixed login.
+    prefix = prefix_from_request(request)
+    if prefix and request.url.path.rstrip("/") == prefix:
+        return _unauth_response(request, reason="root_access")
     # RFC 8252 native-app bearer path: the same provider-minted access token the cookie flow
     # stores, verified with the same provider stack, no cookie read or set. A presented-but-
     # invalid bearer gets the structured 401 so the desktop refreshes/re-logs instead of
